@@ -400,94 +400,22 @@ hs.value = uicontrol(ph, 'Style', 'text', 'Position', [208 38 pos(3)-208 20], ..
     'BackgroundColor', clr, 'FontSize', 8+(~ispc && ~ismac), ...
     'TooltipString', '(x,y,z): top ... bottom');
 
-% IJK java spinners
-labls = 'IJK';
-str = {'Left to Right' 'Posterior to Anterior' 'Inferior to Superior'};
-pos = [38 44 22]; posTxt = [36 10 20];
-for i = 1:3
-    loc = [(i-1)*64+34 pos];
-    txt = sprintf('%s, 1:%g', str{i}, dim(i));
-    hs.ijk(i) = java_spinner(loc, [c(i) 1 dim(i) 1], ph, cb('ijk'), '#', txt);
-    uicontrol(ph, 'Style', 'text', 'String', labls(i), 'BackgroundColor', clr, ...
-        'Position', [loc(1)-11 posTxt], 'TooltipString', txt, 'FontWeight', 'bold');
-end
-
-% Controls for each file
-uipanel('Parent', ph, 'Units', 'pixels', 'Position', [1 2 412 34], ...
-    'BorderType', 'etchedin', 'BorderWidth', 2);
-hs.lb = java_spinner([7 8 48 22], [p.lb -inf inf p.lb_step], ph, ...
-    cb('lb'), '#.##', 'min value (threshold)');
-hs.ub = java_spinner([59 8 56 22], [p.ub -inf inf p.ub_step], ph, ...
-    cb('ub'), '#.##', 'max value (clipped)');
-hs.lutStr = {'grayscale' 'red' 'green' 'blue' 'violet' 'yellow' 'cyan' ...
-    'red-yellow' 'blue-green' 'two-sided'  '<html><font color="red">lines' ...
-    'parula' 'jet' 'hsv' 'hot' 'cool' 'spring' 'summer' 'autumn' 'winter' ...
-    'bone' 'copper' 'pink' 'prism' 'flag' 'phase' 'phase3' 'phase6' 'RGB' 'custom'};
-hs.lut = uicontrol(ph, 'Style', 'popup', 'Position', [113 8 74 22], ...
-    'String', hs.lutStr, 'BackgroundColor', 'w', 'Callback', cb('lut'), ...
-    'Value', p.lut, 'TooltipString', 'Lookup table options for non-RGB data');
-if p.lut==numel(hs.lutStr), set(hs.lut, 'Enable', 'off'); end
-
-hs.alpha = java_spinner([187 8 44 22], [1 0 1 0.1], ph, cb('alpha'), '#.#', ...
-    'Alpha: 0 transparent, 1 opaque');
-
-hs.smooth = uicontrol(ph, 'Style', 'checkbox', 'Value', p.smooth, ...
-    'Position', [231 8 60 22], 'String', 'smooth', 'BackgroundColor', clr, ...
-    'Callback', cb('smooth'), 'TooltipString', 'Smooth image in 3D');
-hs.interp = uicontrol(ph, 'Style', 'popup', 'Position', [291 8 68 22], ...
-    'String', {'nearest' 'linear' 'cubic' 'spline'}, 'Value', p.interp, ...
-    'Callback', cb('interp'), 'Enable', 'off', 'BackgroundColor', 'w', ... 
-    'TooltipString', 'Interpolation method for overlay');
-hs.volume = java_spinner([361 8 44 22], [1 1 nVol 1], ph, cb('volume'), '#', ...
-    ['Volume number, 1:' num2str(nVol)]);
-hs.volume.setEnabled(nVol>1);
 
 %% Three views: sag, cor, tra
 % this panel makes resize easy: axes relative to panel
 hs.frame = uipanel(fh, 'Units', 'pixels', 'Position', [1 1 siz], ...
     'BorderType', 'none', 'BackgroundColor', 'k');
-
+hs.tool = imtool3D_nii_3planes(p.nii,[],hs.frame);
 for i = 1:3
-    j = 1:3; j(j==i) = [];
-    hs.ax(i) = axes('Position', axPos(i,:), 'Parent', hs.frame);
-    hs.hsI(i) = handle(image(zeros(dim(j([2 1])), 'single')));
-    hold(hs.ax(i), 'on');
-    
-    x = [c(j(1))+[-1 1 0 0]*hs.gap(j(1)); 0 dim(j(1))+1 c(j(1))*[1 1]];
-    y = [c(j(2))+[0 0 -1 1]*hs.gap(j(2)); c(j(2))*[1 1] 0 dim(j(2))+1];
-    hs.cross(i,:) = line(x, y);
-
-    hs.xyz(i) = text(0.02, 0.96, num2str(xyz(i)), 'Units', 'normalized', ...
-        'Parent', hs.ax(i), 'FontSize', 12);
+    hs.tool(i).setPosition(axPos(i,:))
 end
-set(hs.hsI, 'ButtonDownFcn', cb('mousedown'));
-p.hsI = hs.hsI; % background img
-p.hsI(1).UserData = p; % store everything in sag img UserData
+set(hs.tool(1).getHandles.Panels.Tools,'Parent',ph,'Position',[0 0 700 30])
 
-labls='ASLSLP'; 
-pos = [0.95 0.5; 0.47 0.96; 0 0.5; 0.47 0.96; 0 0.5; 0.47 0.05]; 
-for i = 1:numel(labls)
-    hs.ras(i) = text(pos(i,1), pos(i,2), labls(i), 'Units', 'normalized', ...
-        'Parent', hs.ax(ceil(i/2)), 'FontSize', 12, 'FontWeight', 'bold');
-end
-
-% early matlab's colormap works only for axis, so ax(4) is needed.
-hs.ax(4) = axes('Position', axPos(4,:), 'Parent', hs.frame);
-try
-    hs.colorbar = colorbar(hs.ax(4), 'YTicks', [0 0.5 1], 'Color', [1 1 1], ...
-        'Location', 'West', 'PickableParts', 'none', 'Visible', 'off');
-catch % for early matlab
-    colorbar('peer', hs.ax(4), 'Location', 'West', 'Units', 'Normalized');
-    hs.colorbar = findobj(fh, 'Tag', 'Colorbar'); 
-    set(hs.colorbar, 'Visible', 'off', 'HitTest', 'off', 'EdgeColor', [1 1 1]);
-end
-
-% image() reverses YDir. Turn off ax and ticks
-set(hs.ax, 'YDir', 'normal', 'Visible', 'off');
-set([hs.ras hs.cross(:)' hs.xyz], 'Color', 'b', 'UIContextMenu', '');
-try set([hs.ras hs.cross(:)' hs.xyz], 'PickableParts', 'none'); % new matlab
-catch, set([hs.ras hs.cross(:)' hs.xyz], 'HitTest', 'off'); % old ones
-end
+set(hs.tool(2).getHandles.Panels.Tools,'Parent',ph,'Position',[30 30 700 30])
+set(hs.tool(1).getHandles.Panels.Hist,'Parent',hs.frame)
+set(hs.tool(1).getHandles.Panels.Hist,'Units','normalized','Position',axPos(4,:))
+set(hs.tool(1).getHandles.Tools.Hist,'Value',1)
+set(hs.tool(1).getHandles.Tools.Hist,'Visible','off')
 
 %% menus
 h = uimenu(fh, 'Label', '&File');
@@ -605,39 +533,6 @@ if isnumeric(fh) % for older matlab
     hs.pref = handle(hs.pref);
 end
 guidata(fh, hs); % store handles and data
-
-%% java_dnd based on dndcontrol at matlabcentral/fileexchange/53511
-try % panel has JavaFrame in later matlab
-    jFrame = handle(hs.frame.JavaFrame.getGUIDEView, 'CallbackProperties');
-catch
-    warning('off', 'MATLAB:HandleGraphics:ObsoletedProperty:JavaFrame');
-    jFrame = fh.JavaFrame.getAxisComponent;
-end
-try java_dnd(jFrame, cb('drop')); catch me, disp(me.message); end
-
-set(fh, 'ResizeFcn', cb('resize'), ... % 'SizeChangedFcn' for later matlab
-    'WindowKeyPressFcn', @KeyPressFcn, 'CloseRequestFcn', cb('closeFig'), ...
-    'PaperPositionMode', 'auto', 'InvertHardcopy', 'off', 'HandleVisibility', 'Callback');
-nii_viewer_cb(fh, [], 'resize', fh); % avoid some weird problem
-
-if pf.mouseOver, set(fh, 'WindowButtonMotionFcn', cb('mousemove')); end
-if pf.rightOnLeft, nii_viewer_cb(hLR, [], 'flipLR', fh); end
-set_cdata(hs);
-set_xyz(hs);
-
-if nargin>1
-    if ischar(varargin{1})
-        addOverlay(varargin{1}, fh);
-    elseif iscellstr(varargin{1})
-        for i=1:numel(varargin{1}), addOverlay(varargin{1}{i}, fh); end
-    end
-end
-
-if hs.form_code(1)<1
-    warndlg(['There is no valid form code in NIfTI. The orientation ' ...
-        'labeling is likely meaningless.']);
-end
-if isfield(p.nii, 'cii'), cii_view(hs); end
 
 %% Get info from sag img UserData
 function p = get_para(hs, iFile)
